@@ -4,6 +4,7 @@
 pub mod free;
 pub mod read;
 pub mod remote;
+pub mod workspace;
 pub mod write;
 
 use rmcp::handler::server::tool::IntoCallToolResult;
@@ -15,6 +16,8 @@ use crate::repo::RepoPathError;
 /// Why a tool call did not produce a result.
 #[derive(Debug, thiserror::Error)]
 pub enum ToolError {
+    #[error(transparent)]
+    Ownership(#[from] crate::ownership::OwnershipError),
     /// Parameters that are well-formed JSON but invalid for the tool. Raised
     /// before anything runs; reaches the client as a tool result with
     /// `isError: true`.

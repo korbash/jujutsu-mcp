@@ -52,8 +52,11 @@ impl JjServer {
         let repo = RepoPath::new(&params.repo)?;
         let args = run_args(&params)?;
         // Held for every command: it cannot be told apart from a write.
-        let _guard = self.lock_write(&repo, &context).await?;
-        let output = self.run_watched(&repo, &args, &context, None).await?;
+        let mut guard = self.lock_write(&repo, &context).await?;
+        // Aliases/configuration/repository overrides can reach any repository
+        // coordinated by this backend, so no other lease may be outstanding.
+        guard.require_exclusive("run", true)?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 }

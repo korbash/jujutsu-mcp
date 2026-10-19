@@ -258,3 +258,74 @@ mise upgrade, rerun `setup`.
 - `--dry-run` prints the plan; `--agent` limits it to some agents.
 - The user's shell hook (`jj-guarda`) and instruction files are not part of
   setup: they belong to one machine's environment, not to the server.
+
+## Workspace ownership: opt-in leases and conservative cleanup
+
+Ownership is opt-in because clients must supply reliable session/executor
+metadata and external edit/process hooks. Identity normalization stays at the
+transport boundary; names and aliases never transfer ownership. These are
+coordination locks for trusted clients, not filesystem access control.
+
+A shared external state directory, stable OS lock and atomic synced JSON preserve
+reservations across processes/restarts. The lock spans complete server mutations
+in addition to the existing operation queue; generations are checked after
+waiting. This favors correctness over backend parallelism. Estimates never evict
+owners, and interrupted transitions require explicit recovery.
+
+Reads use both `--ignore-working-copy` and `--at-operation=@` to avoid snapshots
+and operation-head merges. On jj 0.46, parallel allocation also needs
+`--sparse-patterns=full` followed by `workspace update-stale` in the reserved copy;
+the default sparse mode attempts a forbidden source mutation. Managed copies
+disable Git colocation to avoid leaking Git worktree registrations.
+
+Protection follows outstanding workspace leases. Unlock releases both the workspace
+and the protection of its changes. Another executor can acquire a workspace and
+merge, rebase, edit or squash released results and move main with the normal tools.
+Unlock still saves work and prepares a clean child; it does not automatically
+integrate or publish.
+
+Mutations protect changes reserved by other outstanding leases with
+`immutable_heads()`, including ancestors whose rewrite would indirectly rebase
+active work. Checkout, new-parent, rebase-destination and bookmark checks use the
+same reservations. Changes created, rewritten, checked out or targeted by a
+bookmark move are reserved until the current lease is released. A durable commit
+inventory recovers reservations after interrupted rewrites of pre-existing work;
+other mutations and new acquisitions wait for that transition to be recovered.
+
+Global `undo` and network operations require all other leases in the repository
+to be released. Generic `run` requires all other leases coordinated by the backend
+to be released, since aliases, configuration and repository overrides can escape
+the requested repository. The backend transaction spans these operations too, so
+new acquisitions cannot race the check. No separate operator mode is needed.
+
+Every workspace already shares jj storage, so a saved result alone cannot prove
+integration. Cleanup requires every saved task head from every generation to be
+an ancestor of a named destination or have its exact tree. Uncertain rewritten
+history and incomplete saved task results retain the copy. Live
+files must match saved bytes/modes; ignored/untracked files and unknown metadata
+retain it. Only verified files and empty directories are deleted, never primary
+checkouts.
+
+Managed provenance belongs to a server allocation, not an individual task lease.
+Direct-path reacquisition copies managed status and the jj workspace name from
+the latest lease for that path in the same repository and pool. Pool location
+alone is not proof. Removal or path reuse by another repository ends the old
+allocation. Cleanup and idle reuse always consider the latest lease, including
+its saved result and active/recovery state.
+
+Evidence: isolated tests cover integration of multiple released results into main
+through the ownership-enabled MCP, adoption and release of pre-existing changes,
+indirect rewrite protection, bookmark reservations, fetch/push and undo after
+release, interrupted adoption recovery,
+independent processes, races, restart/resume,
+stale requests, external activity, session renames, reuse, parallel task heads,
+merge/squash proofs and dirty binary/unknown-file retention. Actual editor and
+child-session metadata delivery requires separate integration verification.
+Managed-copy regressions cover parallel allocation, unlock, direct-path reuse and
+cleanup, latest-result integration and dirty files,
+active external activity, and unmanaged paths inside the pool or reused after
+removal.
+
+Reopen if: serialization becomes a measured bottleneck, clients reliably forward
+generations, broad operations can safely coexist with other leases, or jj provides stronger
+proofs of rewritten integration or safe symlink/submodule cleanup.

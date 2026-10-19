@@ -100,6 +100,23 @@ impl JjRunner {
     /// editor set to [`FAILING_EDITOR`]. Dropping the returned future kills
     /// the process, which is how client cancellation reaches jj.
     pub async fn run(&self, repo: &RepoPath, args: &[String]) -> Result<JjOutput, JjError> {
+        let output = self.run_output(repo, args).await?;
+        Ok(JjOutput {
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    }
+
+    /// Raw stdout for verifying saved binary files without lossy UTF-8 conversion.
+    pub async fn run_bytes(&self, repo: &RepoPath, args: &[String]) -> Result<Vec<u8>, JjError> {
+        Ok(self.run_output(repo, args).await?.stdout)
+    }
+
+    async fn run_output(
+        &self,
+        repo: &RepoPath,
+        args: &[String],
+    ) -> Result<std::process::Output, JjError> {
         let mut command = Command::new(&self.program);
         command
             .args(GLOBAL_ARGS)
@@ -120,17 +137,14 @@ impl JjRunner {
             source,
         })?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        if output.status.success() {
-            Ok(JjOutput { stdout, stderr })
-        } else {
-            Err(JjError::Failed {
+        if !output.status.success() {
+            return Err(JjError::Failed {
                 argv: self.argv(args),
                 code: output.status.code(),
-                stderr,
-            })
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            });
         }
+        Ok(output)
     }
 }
 

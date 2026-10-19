@@ -71,13 +71,27 @@ it finds an older one.
 | Read | `status`, `log`, `show`, `diff`, `bookmark_list`, `op_log` |
 | Local write (undoable) | `describe`, `new`, `commit`, `squash`, `split`, `edit`, `rebase`, `restore`, `abandon`, `undo`, `file_untrack`, `bookmark_set` |
 | Network | `git_fetch`, `git_push` |
+| Ownership (opt-in) | `workspace_lock`, `workspace_lock_status`, `workspace_unlock`, `workspace_identity`, `workspace_cleanup` |
 | Anything else | `run`, with the jj arguments as a list |
 
-Every tool takes `repo`, the absolute path of the repository or any directory
-inside it. `log`, `bookmark_list` and `op_log` return JSON. The server also
-ships a short guide to jj's model (no staging area, change ids, bookmarks,
+Every tool except `workspace_identity` takes `repo`, the absolute path of the
+repository or any directory inside it. `log`, `bookmark_list` and `op_log` return
+JSON. The server also ships a short guide to jj's model (no staging area, change ids, bookmarks,
 undo) as MCP instructions, so the agent reads it once per session. See
 [docs/tools.md](docs/tools.md) for every parameter.
+
+## Workspace ownership
+
+Enable with `jujutsu-mcp --ownership-state /absolute/external/state --idle-limit 1`.
+Agents lock before editing and unlock after checks; sequential tasks reuse a
+workspace, while concurrent tasks can request isolated copies. Locks survive
+restart and never expire automatically. Integrations must supply caller identity
+and hooks for file edits/builds. Reads use saved snapshots. Unlock releases the
+task's changes for other agents to integrate into main with the ordinary tools.
+Other outstanding leases remain protected; `undo` and network mutations wait for
+other leases in the repository, and generic `run` waits for all other leases
+coordinated by the backend.
+See [integration setup and recovery](docs/workspace-ownership.md).
 
 ## Documentation
 

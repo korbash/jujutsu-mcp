@@ -10,6 +10,7 @@
   `.cmd` agent CLIs), with `ssh-keygen` from Git for Windows on `PATH`. macOS
   builds in CI without running the tests.
 - [just](https://github.com/casey/just) for the gates.
+- Python 3 on Linux for the isolated stdio identity adapter fixture.
 
 ## Gates
 
@@ -84,3 +85,13 @@ tested end to end against the real jj (`tests/tool_*.rs`).
 
 Design decisions, and what would reopen them, are in
 [decisions.md](decisions.md).
+
+## Workspace ownership
+
+`src/ownership.rs` handles identity, durable state and external hooks;
+`src/tools/workspace.rs` handles leases and protection until unlock; `src/cleanup.rs` verifies
+saved bytes before deletion. Route local writes through `mutation_guard` and
+`run_owned`, and reads through `read_output`. Preserve unknown files and metadata.
+Tests in `tests/workspace_ownership.rs` use isolated repositories and independent
+clients/processes, never a shared service. Adapter setup is documented in
+[workspace-ownership.md](workspace-ownership.md).

@@ -15,9 +15,10 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use tokio::time::{Instant, MissedTickBehavior, interval_at};
 
-use crate::jj::{JjOutput, WriteGuard};
+use crate::jj::JjOutput;
 use crate::repo::RepoPath;
 use crate::server::JjServer;
+use crate::tools::workspace::MutationGuard;
 use crate::tools::{ToolError, non_empty, text_result};
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -210,12 +211,8 @@ impl JjServer {
         &self,
         repo: &RepoPath,
         context: &RequestContext<RoleServer>,
-    ) -> Result<WriteGuard, ToolError> {
-        tokio::select! {
-            biased;
-            () = context.ct.cancelled() => Err(ToolError::Cancelled),
-            guard = self.write_queue.lock(repo) => Ok(guard),
-        }
+    ) -> Result<MutationGuard, ToolError> {
+        self.mutation_guard(repo, context).await
     }
 
     /// Runs jj, sending a progress notification every interval when the
@@ -331,9 +328,10 @@ impl JjServer {
             interval: self.progress_interval,
             label: "git fetch".to_owned(),
         };
-        let _guard = self.lock_write(&repo, &context).await?;
+        let mut guard = self.lock_write(&repo, &context).await?;
+        guard.require_exclusive("git_fetch", false)?;
         let output = self
-            .run_watched(&repo, &args, &context, Some(progress))
+            .run_owned_watched(&repo, &args, &context, &mut guard, Some(progress))
             .await?;
         Ok(text_result(output))
     }
@@ -358,8 +356,11 @@ impl JjServer {
         let dry_args = git_push_args(&params, true)?;
 
         // Held through dry run, count and push so the count matches what is pushed.
-        let _guard = self.lock_write(&repo, &context).await?;
-        let dry_run = self.run_watched(&repo, &dry_args, &context, None).await?;
+        let mut guard = self.lock_write(&repo, &context).await?;
+        guard.require_exclusive("git_push", false)?;
+        let dry_run = self
+            .run_owned(&repo, &dry_args, &context, &mut guard)
+            .await?;
         reject_unmatched_bookmarks(&dry_run)?;
         let count = self.commits_to_sign(&repo, &dry_run, &context).await?;
         if params.dry_run {
@@ -373,7 +374,7 @@ impl JjServer {
             label: format!("git push ({count} commit{plural} to sign, touch the key if asked)"),
         };
         let output = self
-            .run_watched(&repo, &push_args, &context, Some(progress))
+            .run_owned_watched(&repo, &push_args, &context, &mut guard, Some(progress))
             .await?;
         Ok(push_result(count, output))
     }

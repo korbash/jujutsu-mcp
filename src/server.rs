@@ -16,6 +16,7 @@ const DEFAULT_PROGRESS_INTERVAL: Duration = Duration::from_secs(2);
 pub struct JjServer {
     pub(crate) runner: JjRunner,
     pub(crate) write_queue: WriteQueue,
+    pub(crate) ownership: Option<crate::ownership::Ownership>,
     tool_router: ToolRouter<Self>,
     pub(crate) progress_interval: Duration,
     /// Program `split` runs as its diff editor for `contents`: this binary
@@ -28,10 +29,17 @@ impl JjServer {
         Self {
             runner,
             write_queue: WriteQueue::new(),
+            ownership: None,
             tool_router: Self::tool_router(),
             progress_interval: DEFAULT_PROGRESS_INTERVAL,
             split_editor: std::env::current_exe().ok(),
         }
+    }
+
+    /// Enable durable ownership; every cooperating process must use the same directory.
+    pub fn with_ownership(mut self, ownership: crate::ownership::Ownership) -> Self {
+        self.ownership = Some(ownership);
+        self
     }
 
     /// Binary `split` runs as its diff editor (`jujutsu-mcp split-editor`).
@@ -51,7 +59,11 @@ impl JjServer {
 
     /// Every tool group, added here with `+`.
     fn tool_router() -> ToolRouter<Self> {
-        Self::read_router() + Self::write_router() + Self::remote_router() + Self::free_router()
+        Self::read_router()
+            + Self::write_router()
+            + Self::remote_router()
+            + Self::free_router()
+            + Self::workspace_router()
     }
 }
 
@@ -63,6 +75,14 @@ impl ServerHandler for JjServer {
                 "jujutsu-mcp",
                 env!("CARGO_PKG_VERSION"),
             ))
-            .with_instructions(include_str!("instructions.md"))
+            .with_instructions(format!(
+                "{}\nWorkspace ownership mode is {}.\n",
+                include_str!("instructions.md"),
+                if self.ownership.is_some() {
+                    "enabled: acquire before editing"
+                } else {
+                    "disabled"
+                }
+            ))
     }
 }

@@ -1,7 +1,7 @@
 # Tools
 
-Every tool takes `repo`: the absolute path of the repository or of any
-directory inside it. Revisions use jj's revset language (`@`, `@-`, `main`,
+Every tool except `workspace_identity` takes `repo`: the absolute path of the
+repository or of any directory inside it. Revisions use jj's revset language (`@`, `@-`, `main`,
 `feat@origin`, `root()..@`). Paths in `paths` are relative to `repo` and taken
 literally: no globs or fileset syntax, so spaces, parentheses and `|` in file
 names are safe.
@@ -99,3 +99,22 @@ them, and a client cancellation kills the jj process.
 shell, under the same rules as every other tool, and always takes the write
 queue because it cannot tell a read from a write. Prefer the dedicated tools:
 they validate parameters and return structured results.
+
+## Workspace ownership (opt-in)
+
+See [setup and integration contract](workspace-ownership.md). Identity and lease
+generations come from the integration, not tool arguments.
+
+Protection lasts until explicit unlock. An executor holding a lease may rewrite
+and integrate released results and move main using the ordinary write tools.
+Other outstanding leases remain protected. `undo`, `git_fetch` and `git_push`
+require every other lease in the repository to be released; generic `run` requires
+every other lease coordinated by the backend to be released.
+
+| Tool | Parameters | Result |
+| --- | --- | --- |
+| `workspace_identity` | none; integration metadata required | Normalized provider/session/executor, optional `session_name`, source and identity aliases only |
+| `workspace_lock` | `repo`, `task`, `expected_seconds` (1..86400), `wait_seconds` (0..30, default 0), `parallel` (default false), `resume` (default false) | `acquired`, assigned/busy `lease`, `revalidate` |
+| `workspace_lock_status` | `repo` | Active lease or null, elapsed seconds and overdue flag |
+| `workspace_unlock` | `repo`, `message`, `checks_complete` | Released lease with saved commit/operation; refuses in-flight external work or conflicts |
+| `workspace_cleanup` | `repo`, optional `integrated_into` (local main, then trunk() by default) | Removed/retained paths, `retained_reasons` and resolved `integration_targets`; requires every saved task head to be integrated |

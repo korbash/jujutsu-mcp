@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in persistent workspace ownership with lock/status/unlock/identity/cleanup
+  tools, isolated parallel copies, sequential and direct-path reuse, restart
+  recovery, generations and external edit/build activity hooks.
+- Integration-supplied executor identity and optional session names, with a
+  dedicated-executor stdio adapter and clear errors for missing identity.
+- Saved-snapshot reads and protection of outstanding task changes. Released
+  results can be integrated through ordinary tools; repository-wide operations
+  coordinate with other outstanding leases.
+- Conservative cleanup of extra managed copies, verifying every saved task head
+  against named integration destinations and preserving modified, ignored and
+  unknown local content.
+
 ## [0.1.4] - 2026-10-02
 
 ### Added

@@ -41,7 +41,7 @@ async fn start(env: &[(&str, &Path)], stderr_log: &Path) -> Server {
     Server { client, child }
 }
 
-const ALL_TOOLS: [&str; 21] = [
+const ALL_TOOLS: [&str; 26] = [
     "abandon",
     "bookmark_list",
     "bookmark_set",
@@ -63,6 +63,11 @@ const ALL_TOOLS: [&str; 21] = [
     "squash",
     "status",
     "undo",
+    "workspace_cleanup",
+    "workspace_identity",
+    "workspace_lock",
+    "workspace_lock_status",
+    "workspace_unlock",
 ];
 
 #[tokio::test]

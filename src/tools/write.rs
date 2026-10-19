@@ -5,7 +5,8 @@ use std::path::{Component, Path, PathBuf};
 
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::CallToolResult;
-use rmcp::{tool, tool_router};
+use rmcp::service::RequestContext;
+use rmcp::{RoleServer, tool, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -544,11 +545,12 @@ impl JjServer {
     pub async fn describe(
         &self,
         Parameters(params): Parameters<DescribeParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = describe_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -565,11 +567,12 @@ impl JjServer {
     pub async fn new_change(
         &self,
         Parameters(params): Parameters<NewParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = new_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -583,11 +586,12 @@ impl JjServer {
     pub async fn commit(
         &self,
         Parameters(params): Parameters<CommitParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = commit_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -602,11 +606,12 @@ impl JjServer {
     pub async fn squash(
         &self,
         Parameters(params): Parameters<SquashParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = squash_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -621,12 +626,13 @@ impl JjServer {
     pub async fn split(
         &self,
         Parameters(params): Parameters<SplitParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         if params.contents.is_empty() {
             let args = split_args(&params, None)?;
-            let _guard = self.write_queue.lock(&repo).await;
-            let output = self.runner.run(&repo, &args).await?;
+            let mut guard = self.mutation_guard(&repo, &context).await?;
+            let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
             return Ok(text_result(output));
         }
         // Validate everything before anything is written or run.
@@ -644,7 +650,7 @@ impl JjServer {
                 staged: Path::new(""),
             }),
         )?;
-        let _guard = self.write_queue.lock(&repo).await;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
         let root = self.workspace_root(&repo).await?;
         let prefix = repo
             .as_path()
@@ -673,7 +679,7 @@ impl JjServer {
                 staged: staged.path(),
             }),
         )?;
-        let output = self.runner.run(&repo, &args).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -686,11 +692,12 @@ impl JjServer {
     pub async fn edit(
         &self,
         Parameters(params): Parameters<EditParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = edit_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -703,11 +710,12 @@ impl JjServer {
     pub async fn rebase(
         &self,
         Parameters(params): Parameters<RebaseParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = rebase_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -721,11 +729,12 @@ impl JjServer {
     pub async fn restore(
         &self,
         Parameters(params): Parameters<RestoreParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = restore_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -738,11 +747,12 @@ impl JjServer {
     pub async fn abandon(
         &self,
         Parameters(params): Parameters<AbandonParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = abandon_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -756,11 +766,12 @@ impl JjServer {
     pub async fn undo(
         &self,
         Parameters(params): Parameters<UndoParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = undo_args(&params);
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -773,11 +784,12 @@ impl JjServer {
     pub async fn file_untrack(
         &self,
         Parameters(params): Parameters<FileUntrackParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = file_untrack_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 
@@ -790,11 +802,12 @@ impl JjServer {
     pub async fn bookmark_set(
         &self,
         Parameters(params): Parameters<BookmarkSetParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = bookmark_set_args(&params)?;
-        let _guard = self.write_queue.lock(&repo).await;
-        let output = self.runner.run(&repo, &args).await?;
+        let mut guard = self.mutation_guard(&repo, &context).await?;
+        let output = self.run_owned(&repo, &args, &context, &mut guard).await?;
         Ok(text_result(output))
     }
 }

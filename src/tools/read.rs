@@ -272,7 +272,7 @@ impl JjServer {
     ) -> Result<Json<LogOutput>, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = log_args(&params)?;
-        let output = self.runner.run(&repo, &args).await?;
+        let output = self.read_output(&repo, &args).await?;
         let mut commits = parse_commits(&output.stdout)?;
         let limit =
             usize::try_from(params.limit.unwrap_or(DEFAULT_LOG_LIMIT)).unwrap_or(usize::MAX);
@@ -288,7 +288,7 @@ impl JjServer {
         Parameters(params): Parameters<StatusParams>,
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
-        let output = self.runner.run(&repo, &status_args(&params)).await?;
+        let output = self.read_output(&repo, &status_args(&params)).await?;
         Ok(text_result(output))
     }
 
@@ -300,7 +300,7 @@ impl JjServer {
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = show_args(&params)?;
-        let output = self.runner.run(&repo, &args).await?;
+        let output = self.read_output(&repo, &args).await?;
         Ok(text_result(output))
     }
 
@@ -313,7 +313,7 @@ impl JjServer {
     ) -> Result<CallToolResult, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = diff_args(&params)?;
-        let output = self.runner.run(&repo, &args).await?;
+        let output = self.read_output(&repo, &args).await?;
         Ok(text_result(output))
     }
 
@@ -325,7 +325,7 @@ impl JjServer {
     ) -> Result<Json<BookmarkListOutput>, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = bookmark_list_args(&params)?;
-        let output = self.runner.run(&repo, &args).await?;
+        let output = self.read_output(&repo, &args).await?;
         let bookmarks = parse_json_lines(&output.stdout)?;
         Ok(Json(BookmarkListOutput { bookmarks }))
     }
@@ -339,7 +339,7 @@ impl JjServer {
     ) -> Result<Json<OpLogOutput>, ToolError> {
         let repo = RepoPath::new(&params.repo)?;
         let args = op_log_args(&params)?;
-        let output = self.runner.run(&repo, &args).await?;
+        let output = self.read_output(&repo, &args).await?;
         let mut operations: Vec<Operation> = parse_json_lines(&output.stdout)?;
         let limit =
             usize::try_from(params.limit.unwrap_or(DEFAULT_OP_LOG_LIMIT)).unwrap_or(usize::MAX);
